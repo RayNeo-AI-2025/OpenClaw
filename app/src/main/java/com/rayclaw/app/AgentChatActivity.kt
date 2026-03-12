@@ -17,6 +17,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.rayclaw.app.agent.AgentConfig
 import com.rayclaw.app.agent.OpenClawClient
 import com.rayclaw.app.asr.AppLanguage
+import com.rayclaw.app.asr.AsrConfig
+import com.rayclaw.app.asr.ListenMode
 import com.rayclaw.app.asr.SpeechEngine
 import com.rayclaw.app.databinding.ActivityAgentChatBinding
 import com.rayclaw.app.ui.MarkdownRenderer
@@ -41,9 +43,6 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
      * discard themselves if [generation] has moved on, preventing stale updates.
      */
     private var generation = 0
-
-    private val languages = AppLanguage.entries
-    private var langIndex = 0
 
     private var sessionTurnCount = 0
 
@@ -81,10 +80,10 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
 
     private fun initOpenClawClient() {
         openClawClient = OpenClawClient(
-            baseUrl       = AgentConfig.BASE_URL,
-            agentId       = AgentConfig.AGENT_ID,
-            token         = AgentConfig.GATEWAY_TOKEN,
-            user          = AgentConfig.USER_ID,
+            baseUrl        = AgentConfig.BASE_URL,
+            agentId        = AgentConfig.AGENT_ID,
+            token          = AgentConfig.GATEWAY_TOKEN,
+            user           = AgentConfig.USER_ID,
             timeoutSeconds = AgentConfig.TIMEOUT_SECONDS
         )
     }
@@ -93,8 +92,18 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         speechEngine = SpeechEngine(
             context   = this,
             onPartial = { text -> setSpeechInput("$text…", isPartial = true) },
-            onFinal   = { text -> setSpeechInput(text, isPartial = false); askAgent(text) },
-            onError   = { msg  -> setStatus("ASR 错误: $msg", COLOR_ERROR); isListening = false }
+            onFinal   = { text ->
+                setSpeechInput(text, isPartial = false)
+                // Oneshot mode: stop listening as soon as a complete utterance arrives.
+                // The user must tap again for the next query.
+                if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT && isListening) {
+                    isListening = false
+                    stopListening()
+                    setStatus("已暂停，单击继续", COLOR_IDLE)
+                }
+                askAgent(text)
+            },
+            onError   = { msg -> setStatus("ASR 错误: $msg", COLOR_ERROR); isListening = false }
         )
     }
 
@@ -104,7 +113,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         mBindingPair.updateView {
             tvStatus.text = "单击镜腿开始对话"
             tvStatus.setTextColor(COLOR_IDLE)
-            tvLanguage.text = "语音: ${languages[langIndex].displayName}"
+            tvLanguage.text = "语音: ${currentLanguageDisplayName()}"
             tvProvider.text = "OpenClaw"
             tvUserInput.text = ""
             tvUserInput.setTextColor(COLOR_INPUT_EMPTY)
@@ -128,7 +137,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                 when {
                     text.isBlank() -> COLOR_INPUT_EMPTY
                     isPartial      -> COLOR_INPUT_PARTIAL
-                    else           -> COLOR_INPUT_FINAL   // bright ivory — most visible state
+                    else           -> COLOR_INPUT_FINAL
                 }
             )
         }
@@ -146,19 +155,13 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         else mainHandler.postDelayed(responseRenderRunnable, STREAM_RENDER_THROTTLE_MS)
     }
 
-    private fun refreshAsrLanguageLabel() {
-        mBindingPair.updateView {
-            tvLanguage.text = "语音: ${languages[langIndex].displayName}"
-        }
-    }
-
     // ─────────────────────── Session sidebar ───────────────────────
 
     private fun addSession() {
         sessionTurnCount++
         mBindingPair.updateView {
             tvSessions.text = "●  当前对话\n    已交流 $sessionTurnCount 轮"
-            tvSessions.setTextColor(COLOR_SESSION_ACTIVE)   // jade — clearly visible
+            tvSessions.setTextColor(COLOR_SESSION_ACTIVE)
         }
     }
 
@@ -229,7 +232,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                         isProcessing = false
                         setResponseMarkdown(finalText, immediate = true, scrollToBottom = true)
                         addSession()
-                        if (isListening) setStatus("正在监听 ${languages[langIndex].displayName}…", COLOR_LISTENING)
+                        if (isListening) setStatus("正在监听 ${currentLanguageDisplayName()}…", COLOR_LISTENING)
                         else setStatus("已暂停，单击继续", COLOR_IDLE)
                     }
                 },
@@ -238,7 +241,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                     mainHandler.post {
                         isProcessing = false
                         setResponseMarkdown("⚠ $error", immediate = true, scrollToBottom = false)
-                        if (isListening) setStatus("正在监听 ${languages[langIndex].displayName}…", COLOR_LISTENING)
+                        if (isListening) setStatus("正在监听 ${currentLanguageDisplayName()}…", COLOR_LISTENING)
                         else setStatus("已暂停，单击继续", COLOR_IDLE)
                     }
                 }
@@ -265,7 +268,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         }
 
         val (statusText, statusColor) = if (isListening) {
-            "正在监听 ${languages[langIndex].displayName}…" to COLOR_LISTENING
+            "正在监听 ${currentLanguageDisplayName()}…" to COLOR_LISTENING
         } else {
             "单击镜腿开始对话" to COLOR_IDLE
         }
@@ -288,8 +291,8 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     // ─────────────────────── Speech control ───────────────────────
 
     private fun startListening() {
-        speechEngine?.start(listOf(languages[langIndex].code))
-        setStatus("正在监听 ${languages[langIndex].displayName}…", COLOR_LISTENING)
+        speechEngine?.start(listOf(AsrConfig.LANGUAGE))
+        setStatus("正在监听 ${currentLanguageDisplayName()}…", COLOR_LISTENING)
     }
 
     private fun stopListening() = speechEngine?.stop() ?: Unit
@@ -299,24 +302,40 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         isListening = !isListening
         if (isListening) {
             startListening()
-            FToast.show("开始监听: ${languages[langIndex].displayName}")
+            val modeHint = if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT) "（单次）" else ""
+            FToast.show("开始监听: ${currentLanguageDisplayName()} $modeHint".trim())
         } else {
             stopListening()
             setStatus("已暂停，单击继续", COLOR_IDLE)
         }
     }
 
-    private fun switchAsrLanguage(direction: Int) {
-        val wasListening = isListening
-        if (wasListening) { stopListening(); isListening = false }
-        langIndex = (langIndex + direction + languages.size) % languages.size
-        refreshAsrLanguageLabel()
-        FToast.show("语音语言: ${languages[langIndex].displayName}")
-        if (wasListening) { isListening = true; startListening() }
-    }
+    // ─────────────────────── Helpers ───────────────────────
+
+    /**
+     * Returns the human-readable display name for the currently configured ASR language.
+     * Falls back to the raw language code if the code is not in [AppLanguage].
+     */
+    private fun currentLanguageDisplayName(): String =
+        try { AppLanguage.fromCode(AsrConfig.LANGUAGE).displayName }
+        catch (_: Exception) { AsrConfig.LANGUAGE }
 
     // ─────────────────────── Gesture map ───────────────────────
 
+    /**
+     * Temple gesture bindings:
+     *
+     *  Click          — toggle listening on/off
+     *  DoubleClick    — exit app
+     *  TripleClick    — reset conversation
+     *  SlideForward   — scroll AI response UP   (read previous)
+     *  SlideBackward  — scroll AI response DOWN  (read more)
+     *  SlideUpwards   — scroll AI response UP
+     *  SlideDownwards — scroll AI response DOWN
+     *
+     * Language is configured via rayclaw.conf (ASR_LANGUAGE=zh|en|ja|...).
+     * Listen mode is configured via rayclaw.conf (ASR_LISTEN_MODE=continuous|oneshot).
+     */
     private fun collectTempleActions() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -324,12 +343,11 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                     when (action) {
                         is TempleAction.Click          -> toggleListening()
                         is TempleAction.DoubleClick    -> { FToast.show("退出"); finish() }
-                        is TempleAction.SlideForward   -> switchAsrLanguage(+1)
-                        is TempleAction.SlideBackward  -> switchAsrLanguage(-1)
+                        is TempleAction.TripleClick    -> resetConversation()
+                        is TempleAction.SlideForward   -> scrollResponseBy(-SCROLL_STEP)
+                        is TempleAction.SlideBackward  -> scrollResponseBy(+SCROLL_STEP)
                         is TempleAction.SlideUpwards   -> scrollResponseBy(-SCROLL_STEP)
                         is TempleAction.SlideDownwards -> scrollResponseBy(+SCROLL_STEP)
-                        // TripleClick → reset (avoids system long-press menu conflict)
-                        is TempleAction.TripleClick    -> resetConversation()
                         else -> Unit
                     }
                 }
@@ -359,24 +377,22 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         private const val ASSET_BASE_URL = "file:///android_asset/"
         private const val WEBVIEW_READY_TAG = "agent_response_webview_ready"
 
-        /** px scrolled per SlideUpwards / SlideDownwards swipe */
+        /** px scrolled per swipe gesture */
         private const val SCROLL_STEP = 320
 
         // ── Status bar colours ─────────────────────────────────────────────
-        // COLOR_IDLE is intentionally dim — status bar is secondary info.
-        // When active (listening/thinking/error) it becomes clearly visible.
-        @ColorInt private val COLOR_IDLE      = Color.parseColor("#484838")   // warm dim
-        @ColorInt private val COLOR_LISTENING = Color.parseColor("#00C896")   // jade green
-        @ColorInt private val COLOR_THINKING  = Color.parseColor("#F5A30A")   // warm amber
-        @ColorInt private val COLOR_ERROR     = Color.parseColor("#FF5555")   // red
+        @ColorInt private val COLOR_IDLE      = Color.parseColor("#484838")
+        @ColorInt private val COLOR_LISTENING = Color.parseColor("#00C896")
+        @ColorInt private val COLOR_THINKING  = Color.parseColor("#F5A30A")
+        @ColorInt private val COLOR_ERROR     = Color.parseColor("#FF5555")
 
         // ── User speech input colours ──────────────────────────────────────
-        @ColorInt private val COLOR_INPUT_EMPTY   = Color.parseColor("#181816") // near invisible
-        @ColorInt private val COLOR_INPUT_PARTIAL = Color.parseColor("#808060") // mid warm
-        @ColorInt private val COLOR_INPUT_FINAL   = Color.parseColor("#EEE8DC") // warm ivory — most visible
+        @ColorInt private val COLOR_INPUT_EMPTY   = Color.parseColor("#181816")
+        @ColorInt private val COLOR_INPUT_PARTIAL = Color.parseColor("#808060")
+        @ColorInt private val COLOR_INPUT_FINAL   = Color.parseColor("#EEE8DC")
 
         // ── Sidebar session colours ────────────────────────────────────────
         @ColorInt private val COLOR_SESSION_IDLE   = Color.parseColor("#303028")
-        @ColorInt private val COLOR_SESSION_ACTIVE = Color.parseColor("#00C896") // jade — matches accent
+        @ColorInt private val COLOR_SESSION_ACTIVE = Color.parseColor("#00C896")
     }
 }

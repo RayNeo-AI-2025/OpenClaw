@@ -6,14 +6,14 @@
 #  1. Copy this file and remove the ".template" suffix:
 #       cp rayclaw.conf.template rayclaw.conf
 #
-#  2. Fill in your own keys below (remove the placeholder values).
+#  2. Fill in your own values below (uncomment lines and replace placeholders).
 #
 #  3. Push to the glasses once (no rebuild needed):
-#       adb push rayclaw.conf /sdcard/Android/data/com.example.xrappinit/files/rayclaw.conf
+#       adb push rayclaw.conf /sdcard/Android/data/com.rayclaw.app/files/rayclaw.conf
 #
 #  4. (Re-)launch the app — runtime values take effect immediately.
 #
-#  To update a key: edit this file → adb push again → relaunch.
+#  To update a value: edit this file → adb push again → relaunch.
 #  To remove a key and fall back to the compiled-in BuildConfig value:
 #    delete the line from the file → adb push again → relaunch.
 #
@@ -30,6 +30,33 @@
 # ── Alibaba DashScope ASR ─────────────────────────────────────────────────────
 # Get your key at: https://dashscope.console.aliyun.com/ → API-KEY 管理
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ── ASR language ──────────────────────────────────────────────────────────────
+# BCP-47 language code passed to DashScope as language_hints.
+# Supported values (paraformer-realtime-v2):
+#   zh  — 中文（默认）
+#   en  — English
+#   ja  — 日本語
+#   ko  — 한국어
+#   fr  — Français
+#   de  — Deutsch
+#   es  — Español
+#   ru  — Русский
+# Default: zh
+# ASR_LANGUAGE=zh
+
+# ── ASR listen mode ───────────────────────────────────────────────────────────
+# Controls microphone behaviour after a complete utterance is recognised.
+#
+#   continuous  — keep recording until the user taps again.
+#                 Best for back-and-forth conversation.  (default)
+#
+#   oneshot     — stop automatically after the first final transcript.
+#                 The user must tap again for each new query.
+#                 Best for precise single-query input.
+#
+# Default: continuous
+# ASR_LISTEN_MODE=continuous
 
 # ── OpenClaw Agent Gateway ────────────────────────────────────────────────────
 # Base URL of your OpenClaw server (include port, no trailing slash)

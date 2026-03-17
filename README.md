@@ -290,6 +290,10 @@ OPENCLAW_AGENT_ID=main
 
 ```bash
 adb push rayclaw.conf /sdcard/Android/data/com.rayclaw.app/files/rayclaw.conf
+
+或者
+
+"$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" push rayclaw.conf /sdcard/Android/data/com.rayclaw.app/files/rayclaw.conf
 ```
 
 ### 第六步：启动应用

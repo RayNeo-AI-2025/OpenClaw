@@ -260,6 +260,7 @@ adb install app-release.apk
 | 列表为空 | 确认使用数据线而非充电线；检查开发者模式是否已开启；重启眼镜 |
 | 状态 `unauthorized` | 检查眼镜屏幕是否有待确认的"允许 USB 调试"弹窗 |
 | Windows 11 无法识别 | 已知驱动兼容问题——使用 [Zadig](https://zadig.akeo.ie/) 为眼镜安装 WinUSB 驱动后重试 |
+| Windows 无设备列表（未安装 Android Studio） | 未安装 Android Studio 的电脑缺少 Google USB Driver 和最新 platform-tools。无需安装完整 IDE，只需：①从 [Google USB Driver](https://developer.android.com/studio/run/win-usb) 下载驱动并在设备管理器中手动安装；②确认 platform-tools 为最新版本。安装驱动后重新插拔设备即可 |
 
 </details>
 
@@ -289,11 +290,14 @@ OPENCLAW_AGENT_ID=main
 推送配置到眼镜：
 
 ```bash
+# 方式一：直接推送（Android 10 及以下）
 adb push rayclaw.conf /sdcard/Android/data/com.rayclaw.app/files/rayclaw.conf
 
-或者
-
-"$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" push rayclaw.conf /sdcard/Android/data/com.rayclaw.app/files/rayclaw.conf
+# 方式二：通过 run-as 推送（Android 11+ Scoped Storage 限制时使用）
+# 如果方式一报错 "secure_mkdirs failed: Operation not permitted"，请使用此方式
+adb push rayclaw.conf /data/local/tmp/rayclaw.conf
+adb shell run-as com.rayclaw.app cp /data/local/tmp/rayclaw.conf /data/data/com.rayclaw.app/files/rayclaw.conf
+adb shell rm /data/local/tmp/rayclaw.conf
 ```
 
 ### 第六步：启动应用
@@ -371,7 +375,12 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ```bash
 cp rayclaw.conf.template rayclaw.conf
 # 编辑 rayclaw.conf 填入实际参数
-adb push rayclaw.conf /sdcard/Android/data/com.rayclaw.app/files/rayclaw.conf
+
+# 推送配置（如果直接 push 报 "Operation not permitted"，使用 run-as 方式）
+adb push rayclaw.conf /data/local/tmp/rayclaw.conf
+adb shell run-as com.rayclaw.app cp /data/local/tmp/rayclaw.conf /data/data/com.rayclaw.app/files/rayclaw.conf
+adb shell rm /data/local/tmp/rayclaw.conf
+
 adb shell am force-stop com.rayclaw.app
 adb shell am start -n com.rayclaw.app/.AgentChatActivity
 ```

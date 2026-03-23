@@ -195,7 +195,7 @@ openclaw status
 
 ### 第一步：下载 APK
 
-前往本项目的 [GitHub Releases](https://github.com/lunanightshade-z/openclaw/releases) 页面，下载最新版本的 `app-release.apk`。
+前往本项目的 [GitHub Releases](https://github.com/RayNeo-AI-2025/OpenClaw/releases) 页面，下载最新版本的 `app-release.apk`。
 
 ### 第二步：在眼镜上开启开发者模式
 

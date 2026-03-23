@@ -19,6 +19,7 @@ object AppSettings {
     private const val PREFS_NAME      = "openclaw_settings"
     private const val KEY_LANGUAGE    = "asr_language"
     private const val KEY_LISTEN_MODE = "asr_listen_mode"
+    private const val KEY_UI_LANGUAGE = "ui_language"
 
     private lateinit var prefs: SharedPreferences
 
@@ -43,6 +44,14 @@ object AppSettings {
     var listenModeKey: String
         get() = prefs.getString(KEY_LISTEN_MODE, "continuous") ?: "continuous"
         set(value) { prefs.edit().putString(KEY_LISTEN_MODE, value).apply() }
+
+    /**
+     * UI display language code: "zh" or "en".
+     * Empty string "" means not yet set (triggers auto-detection on first launch).
+     */
+    var uiLanguage: String
+        get() = prefs.getString(KEY_UI_LANGUAGE, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_UI_LANGUAGE, value).apply() }
 
     /**
      * In-memory flag: SettingsActivity sets this to true when the user

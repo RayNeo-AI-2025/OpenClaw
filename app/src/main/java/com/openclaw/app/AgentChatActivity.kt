@@ -1,4 +1,4 @@
-﻿package com.openclaw.app
+package com.openclaw.app
 
 import android.Manifest
 import android.content.Intent
@@ -72,10 +72,9 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
 
     override fun onResume() {
         super.onResume()
-        // Refresh the language badge whenever we return from SettingsActivity.
-        mBindingPair.updateView {
-            tvLanguage.text = "语音: ${currentLanguageDisplayName()}"
-        }
+        // Refresh all UI text whenever we return from SettingsActivity
+        // (UI language or ASR language may have changed).
+        refreshUiText()
         // Execute a conversation reset requested from SettingsActivity.
         if (AppSettings.pendingReset) {
             AppSettings.pendingReset = false
@@ -113,11 +112,11 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                 if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT && isListening) {
                     isListening = false
                     stopListening()
-                    setStatus("已暂停，单击继续", COLOR_IDLE)
+                    setStatus(S.pausedTapContinue, COLOR_IDLE)
                 }
                 askAgent(text)
             },
-            onError   = { msg -> setStatus("ASR 错误: $msg", COLOR_ERROR); isListening = false }
+            onError   = { msg -> setStatus(S.asrError(msg), COLOR_ERROR); isListening = false }
         )
     }
 
@@ -125,16 +124,33 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
 
     private fun renderIdleUI() {
         mBindingPair.updateView {
-            tvStatus.text = "单击镜腿开始对话"
+            tvStatus.text = S.tapToStart
             tvStatus.setTextColor(COLOR_IDLE)
-            tvLanguage.text = "语音: ${currentLanguageDisplayName()}"
+            tvLanguage.text = S.voiceBadge(currentLanguageDisplayName())
             tvProvider.text = "OpenClaw"
             tvUserInput.text = ""
             tvUserInput.setTextColor(COLOR_INPUT_EMPTY)
+            tvSidebarLabel.text = S.sessionLabel
             tvSessions.text = ""
             tvSessions.setTextColor(COLOR_SESSION_IDLE)
+            tvHint.text = S.chatHintBar
         }
         setResponseMarkdown("", immediate = true, scrollToBottom = false)
+    }
+
+    /** Refresh all language-sensitive text (called from onResume after settings change). */
+    private fun refreshUiText() {
+        mBindingPair.updateView {
+            tvLanguage.text = S.voiceBadge(currentLanguageDisplayName())
+            tvSidebarLabel.text = S.sessionLabel
+            tvHint.text = S.chatHintBar
+            if (!isListening && !isProcessing) {
+                tvStatus.text = S.tapToStart
+            }
+            if (sessionTurnCount > 0) {
+                tvSessions.text = S.sessionInfo(sessionTurnCount)
+            }
+        }
     }
 
     private fun setStatus(text: String, @ColorInt color: Int = COLOR_IDLE) {
@@ -174,7 +190,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     private fun addSession() {
         sessionTurnCount++
         mBindingPair.updateView {
-            tvSessions.text = "●  当前对话\n    已交流 $sessionTurnCount 轮"
+            tvSessions.text = S.sessionInfo(sessionTurnCount)
             tvSessions.setTextColor(COLOR_SESSION_ACTIVE)
         }
     }
@@ -230,7 +246,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         if (isProcessing) return
         isProcessing = true
         val myGen = generation
-        setStatus("AI 思考中…", COLOR_THINKING)
+        setStatus(S.aiThinking, COLOR_THINKING)
         setResponseMarkdown("", immediate = true, scrollToBottom = false)
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -246,8 +262,8 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                         isProcessing = false
                         setResponseMarkdown(finalText, immediate = true, scrollToBottom = true)
                         addSession()
-                        if (isListening) setStatus("正在监听 ${currentLanguageDisplayName()}…", COLOR_LISTENING)
-                        else setStatus("已暂停，单击继续", COLOR_IDLE)
+                        if (isListening) setStatus(S.listening(currentLanguageDisplayName()), COLOR_LISTENING)
+                        else setStatus(S.pausedTapContinue, COLOR_IDLE)
                     }
                 },
                 onError = { error ->
@@ -255,8 +271,8 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                     mainHandler.post {
                         isProcessing = false
                         setResponseMarkdown("⚠ $error", immediate = true, scrollToBottom = false)
-                        if (isListening) setStatus("正在监听 ${currentLanguageDisplayName()}…", COLOR_LISTENING)
-                        else setStatus("已暂停，单击继续", COLOR_IDLE)
+                        if (isListening) setStatus(S.listening(currentLanguageDisplayName()), COLOR_LISTENING)
+                        else setStatus(S.pausedTapContinue, COLOR_IDLE)
                     }
                 }
             )
@@ -282,12 +298,12 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         }
 
         val (statusText, statusColor) = if (isListening) {
-            "正在监听 ${currentLanguageDisplayName()}…" to COLOR_LISTENING
+            S.listening(currentLanguageDisplayName()) to COLOR_LISTENING
         } else {
-            "单击镜腿开始对话" to COLOR_IDLE
+            S.tapToStart to COLOR_IDLE
         }
         setStatus(statusText, statusColor)
-        FToast.show("正在重置对话…")
+        FToast.show(S.resettingChat)
 
         val myGen = generation
         lifecycleScope.launch(Dispatchers.IO) {
@@ -295,7 +311,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                 text       = "/reset",
                 onDelta    = { _, _ -> },
                 onComplete = { _ ->
-                    if (generation == myGen) mainHandler.post { FToast.show("对话已重置") }
+                    if (generation == myGen) mainHandler.post { FToast.show(S.chatReset) }
                 },
                 onError    = { _ -> /* local already cleared */ }
             )
@@ -306,21 +322,21 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
 
     private fun startListening() {
         speechEngine?.start(listOf(AsrConfig.LANGUAGE))
-        setStatus("正在监听 ${currentLanguageDisplayName()}…", COLOR_LISTENING)
+        setStatus(S.listening(currentLanguageDisplayName()), COLOR_LISTENING)
     }
 
     private fun stopListening() = speechEngine?.stop() ?: Unit
 
     private fun toggleListening() {
-        if (speechEngine == null) { FToast.show("语音引擎未就绪"); return }
+        if (speechEngine == null) { FToast.show(S.speechNotReady); return }
         isListening = !isListening
         if (isListening) {
             startListening()
-            val modeHint = if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT) "（单次）" else ""
-            FToast.show("开始监听: ${currentLanguageDisplayName()} $modeHint".trim())
+            val modeHint = if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT) S.oneshotHint else ""
+            FToast.show(S.startListenToast(currentLanguageDisplayName(), modeHint))
         } else {
             stopListening()
-            setStatus("已暂停，单击继续", COLOR_IDLE)
+            setStatus(S.pausedTapContinue, COLOR_IDLE)
         }
     }
 
@@ -359,7 +375,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                     when (action) {
                         is TempleAction.Click          -> toggleListening()
                         is TempleAction.TripleClick    -> openSettings()
-                        is TempleAction.DoubleClick    -> { FToast.show("退出"); finish() }
+                        is TempleAction.DoubleClick    -> { FToast.show(S.exitToast); finish() }
                         is TempleAction.SlideForward   -> scrollResponseBy(-SCROLL_STEP)
                         is TempleAction.SlideBackward  -> scrollResponseBy(+SCROLL_STEP)
                         is TempleAction.SlideUpwards   -> scrollResponseBy(-SCROLL_STEP)
@@ -388,7 +404,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         if (requestCode == REQ_MIC &&
             grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) initSpeechEngine()
-        else setStatus("需要麦克风权限才能使用", COLOR_ERROR)
+        else setStatus(S.micPermRequired, COLOR_ERROR)
     }
 
     companion object {

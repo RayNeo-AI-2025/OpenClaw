@@ -1,4 +1,4 @@
-﻿package com.openclaw.app
+package com.openclaw.app
 
 import android.graphics.Color
 import android.os.Bundle
@@ -22,9 +22,10 @@ import kotlinx.coroutines.launch
  * Triple-click cancels without saving.
  *
  * Rows:
- *  0 — 监听模式   (cycle: 持续监听 / 单次识别)
- *  1 — 识别语言   (cycle: 8 languages)
- *  2 — 重置对话   (action: sets AppSettings.pendingReset, saves, exits)
+ *  0 — Listen Mode   (cycle: continuous / oneshot)
+ *  1 — ASR Language   (cycle: 8 languages)
+ *  2 — UI Language    (cycle: 中文 / English)
+ *  3 — Reset Chat     (action: sets AppSettings.pendingReset, saves, exits)
  *
  * Gesture map:
  *  SlideUpwards   / SlideDownwards  → navigate between rows
@@ -40,14 +41,12 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
     // ── Temporary editing state (not persisted until DoubleClick or reset) ────
 
     private val languages   = AppLanguage.entries
-    private val listenModes = listOf(
-        "continuous" to "持续监听",
-        "oneshot"    to "单次识别"
-    )
+    private val uiLanguages = UiLanguage.entries
 
-    private var selectedRow     = 0   // 0 = listen mode, 1 = language, 2 = reset
-    private var langIndex       = 0   // index into AppLanguage.entries
-    private var listenModeIndex = 0   // index into listenModes
+    private var selectedRow     = 0
+    private var langIndex       = 0
+    private var listenModeIndex = 0
+    private var uiLangIndex     = 0
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -64,22 +63,32 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
     private fun loadCurrentSettings() {
         langIndex = languages.indexOfFirst { it.code == AppSettings.language }
             .coerceAtLeast(0)
-        listenModeIndex = listenModes.indexOfFirst { it.first == AppSettings.listenModeKey }
+        listenModeIndex = if (AppSettings.listenModeKey == "oneshot") 1 else 0
+        uiLangIndex = uiLanguages.indexOfFirst { it.code == AppSettings.uiLanguage }
             .coerceAtLeast(0)
     }
 
     // ── Rendering ──────────────────────────────────────────────────────────────
 
+    private fun listenModeDisplay(index: Int): String =
+        if (index == 0) S.continuous else S.oneshot
+
     private fun renderSettings() {
-        val listenLabel   = listenModes[listenModeIndex].second
+        val listenLabel   = listenModeDisplay(listenModeIndex)
         val languageLabel = languages[langIndex].displayName
+        val uiLangLabel   = uiLanguages[uiLangIndex].displayName
 
         mBindingPair.updateView {
-            // ── Listen Mode row ────────────────────────────────────────────────
+            // ── Title & hint bar ─────────────────────────────────────────────
+            tvSettingsTitle.text = S.settingsTitle
+            tvSettingsHint.text  = S.settingsHintBar
+
+            // ── Row 0: Listen Mode ──────────────────────────────────────────
             val listenSel = selectedRow == ROW_LISTEN_MODE
             rowListenMode.setBackgroundColor(
                 if (listenSel) COLOR_ROW_SELECTED else Color.TRANSPARENT
             )
+            tvListenModeLabel.text = S.labelListenMode
             tvListenModeLabel.setTextColor(
                 if (listenSel) COLOR_LABEL_ACTIVE else COLOR_LABEL_IDLE
             )
@@ -88,11 +97,12 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
                 if (listenSel) COLOR_VALUE_ACTIVE else COLOR_VALUE_IDLE
             )
 
-            // ── Language row ───────────────────────────────────────────────────
+            // ── Row 1: ASR Language ─────────────────────────────────────────
             val langSel = selectedRow == ROW_LANGUAGE
             rowLanguage.setBackgroundColor(
                 if (langSel) COLOR_ROW_SELECTED else Color.TRANSPARENT
             )
+            tvLanguageLabel.text = S.labelAsrLanguage
             tvLanguageLabel.setTextColor(
                 if (langSel) COLOR_LABEL_ACTIVE else COLOR_LABEL_IDLE
             )
@@ -101,11 +111,26 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
                 if (langSel) COLOR_VALUE_ACTIVE else COLOR_VALUE_IDLE
             )
 
-            // ── Reset row (action, no cycle arrows) ────────────────────────────
+            // ── Row 2: UI Language ──────────────────────────────────────────
+            val uiSel = selectedRow == ROW_UI_LANGUAGE
+            rowUiLanguage.setBackgroundColor(
+                if (uiSel) COLOR_ROW_SELECTED else Color.TRANSPARENT
+            )
+            tvUiLanguageLabel.text = S.labelUiLanguage
+            tvUiLanguageLabel.setTextColor(
+                if (uiSel) COLOR_LABEL_ACTIVE else COLOR_LABEL_IDLE
+            )
+            tvUiLanguageValue.text = if (uiSel) "← $uiLangLabel →" else uiLangLabel
+            tvUiLanguageValue.setTextColor(
+                if (uiSel) COLOR_VALUE_ACTIVE else COLOR_VALUE_IDLE
+            )
+
+            // ── Row 3: Reset (action, no cycle arrows) ──────────────────────
             val resetSel = selectedRow == ROW_RESET
             rowReset.setBackgroundColor(
                 if (resetSel) COLOR_RESET_ROW_SELECTED else Color.TRANSPARENT
             )
+            tvResetLabel.text = S.labelReset
             tvResetLabel.setTextColor(
                 if (resetSel) COLOR_RESET_ACTIVE else COLOR_RESET_IDLE
             )
@@ -142,13 +167,20 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
     private fun cycleOrConfirm(delta: Int) {
         when (selectedRow) {
             ROW_LISTEN_MODE -> {
-                listenModeIndex = (listenModeIndex + delta + listenModes.size) % listenModes.size
-                FToast.show(listenModes[listenModeIndex].second)
+                listenModeIndex = (listenModeIndex + delta + 2) % 2
+                FToast.show(listenModeDisplay(listenModeIndex))
                 renderSettings()
             }
             ROW_LANGUAGE -> {
                 langIndex = (langIndex + delta + languages.size) % languages.size
                 FToast.show(languages[langIndex].displayName)
+                renderSettings()
+            }
+            ROW_UI_LANGUAGE -> {
+                uiLangIndex = (uiLangIndex + delta + uiLanguages.size) % uiLanguages.size
+                // Live-preview: switch UI language immediately so labels update
+                UiStrings.switchTo(uiLanguages[uiLangIndex])
+                FToast.show(uiLanguages[uiLangIndex].displayName)
                 renderSettings()
             }
             ROW_RESET -> {
@@ -161,27 +193,32 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
 
     private fun saveAndExit() {
         AppSettings.language      = languages[langIndex].code
-        AppSettings.listenModeKey = listenModes[listenModeIndex].first
+        AppSettings.listenModeKey = if (listenModeIndex == 0) "continuous" else "oneshot"
+        AppSettings.uiLanguage    = uiLanguages[uiLangIndex].code
+        UiStrings.switchTo(uiLanguages[uiLangIndex])
         if (AppSettings.pendingReset) {
-            FToast.show("已保存，对话已重置")
+            FToast.show(S.savedAndReset)
         } else {
-            FToast.show("设置已保存")
+            FToast.show(S.settingsSaved)
         }
         finish()
     }
 
     private fun cancelAndExit() {
-        FToast.show("已取消")
+        // Revert live-preview of UI language
+        UiStrings.switchTo(UiLanguage.fromCode(AppSettings.uiLanguage))
+        FToast.show(S.cancelled)
         finish()
     }
 
     // ── Constants ──────────────────────────────────────────────────────────────
 
     companion object {
-        private const val ROW_COUNT       = 3
+        private const val ROW_COUNT       = 4
         private const val ROW_LISTEN_MODE = 0
         private const val ROW_LANGUAGE    = 1
-        private const val ROW_RESET       = 2
+        private const val ROW_UI_LANGUAGE = 2
+        private const val ROW_RESET       = 3
 
         @ColorInt private val COLOR_ROW_SELECTED       = Color.parseColor("#1500C896")
         @ColorInt private val COLOR_LABEL_ACTIVE       = Color.parseColor("#00C896")

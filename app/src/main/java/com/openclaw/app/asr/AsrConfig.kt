@@ -18,6 +18,9 @@ import com.openclaw.app.RuntimeConfig
  *
  *    DASHSCOPE_API_KEY=sk-xxxx
  *
+ *    # ASR 模型（海外用户需改为 fun-asr-realtime，因为 paraformer 仅限中国大陆）
+ *    DASHSCOPE_ASR_MODEL=fun-asr-realtime
+ *
  *    # WebSocket 端点（海外用户需改为国际版端点）
  *    DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
  *
@@ -33,8 +36,9 @@ import com.openclaw.app.RuntimeConfig
  *    中国大陆用户：https://dashscope.console.aliyun.com/ → API-KEY 管理
  *    海外用户：https://bailian.console.alibabacloud.com/ → API-KEY 管理
  *
- *  海外用户还需配置 WebSocket 端点（openclaw.conf 或 local.properties）：
+ *  海外用户还需配置端点和模型（openclaw.conf 或 local.properties）：
  *    DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
+ *    DASHSCOPE_ASR_MODEL=fun-asr-realtime
  * ════════════════════════════════════════════════
  */
 
@@ -78,8 +82,11 @@ object AsrConfig {
             else -> ListenMode.CONTINUOUS
         }
 
-    // ASR 模型（支持中英日韩法德西俄等多语言实时识别）
-    const val MODEL = "paraformer-realtime-v2"
+    // ASR 模型（默认 paraformer-realtime-v2，海外用户须改为 fun-asr-realtime）
+    private const val DEFAULT_MODEL = "paraformer-realtime-v2"
+    val MODEL: String
+        get() = RuntimeConfig.get("DASHSCOPE_ASR_MODEL", BuildConfig.DASHSCOPE_ASR_MODEL)
+            .trim().ifBlank { DEFAULT_MODEL }
 
     // WebSocket 端点（默认国内版；海外用户通过 openclaw.conf 或 local.properties 覆盖为国际版）
     private const val DEFAULT_WS_ENDPOINT = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"

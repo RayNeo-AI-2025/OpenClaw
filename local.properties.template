@@ -30,8 +30,8 @@
 # sdk.dir=C\:\\Users\\YourName\\AppData\\Local\\Android\\Sdk
 
 # ── Alibaba DashScope ASR ─────────────────────────────────────────────────────
-# China users:         https://dashscope.console.aliyun.com/ → API-KEY 管理
-# International users: https://bailian.console.alibabacloud.com/ → API-KEY 管理
+# China users:         https://dashscope.console.aliyun.com/ → API-KEY 
+# International users: https://bailian.console.alibabacloud.com/ → API-KEY
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # WebSocket endpoint (international users MUST change this):
@@ -39,6 +39,10 @@ DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 #   International:     wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
 # Leave blank or omit to use the China endpoint (default).
 # DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
+
+# ASR model（海外用户须改为 fun-asr-realtime；paraformer-realtime-v2 仅限中国大陆）
+# 留空则使用默认 paraformer-realtime-v2
+# DASHSCOPE_ASR_MODEL=fun-asr-realtime
 
 # ── OpenClaw Agent Gateway ────────────────────────────────────────────────────
 # Base URL of your OpenClaw server (include port, no trailing slash)

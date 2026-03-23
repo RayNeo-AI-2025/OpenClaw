@@ -6,6 +6,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -134,13 +135,17 @@ class SpeechEngine(
             return
         }
 
+        val endpoint = AsrConfig.WS_ENDPOINT
+        Log.i(TAG, "Connecting to DashScope endpoint: $endpoint, model: ${AsrConfig.MODEL}")
+
         val request = Request.Builder()
-            .url(AsrConfig.WS_ENDPOINT)
+            .url(endpoint)
             .header("Authorization", "Bearer $apiKey")
             .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
+                Log.i(TAG, "WebSocket connected, sending run-task")
                 ws.send(buildRunTaskJson())
             }
 
@@ -149,6 +154,7 @@ class SpeechEngine(
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                Log.e(TAG, "WebSocket failure: ${t.message}, response code: ${response?.code}", t)
                 if (isRunning) {
                     isRunning = false
                     stopRecording()
@@ -285,6 +291,10 @@ class SpeechEngine(
             put("input", JSONObject())
         })
     }.toString()
+
+    companion object {
+        private const val TAG = "SpeechEngine"
+    }
 
     private fun buildFinishTaskJson(): String = JSONObject().apply {
         put("header", JSONObject().apply {

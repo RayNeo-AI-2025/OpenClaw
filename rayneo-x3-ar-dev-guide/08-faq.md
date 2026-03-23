@@ -317,7 +317,9 @@ SpeechRecognizer.isRecognitionAvailable(context)
 | 多语言 | 中英日韩法德西俄 | 主要中英 | 多语言 |
 | 会话限制 | 无 | 60 秒 | 无 |
 
-申请地址：https://dashscope.console.aliyun.com/ → API-KEY 管理
+申请地址：
+- 中国大陆：https://dashscope.console.aliyun.com/ → API-KEY 管理
+- 海外用户：https://bailian.console.alibabacloud.com/ → API-KEY 管理（无需中国手机号，API Key 与端点须使用国际版）
 
 ---
 

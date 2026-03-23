@@ -40,6 +40,8 @@ android {
         // 访问方式：BuildConfig.DASHSCOPE_API_KEY
         buildConfigField("String", "DASHSCOPE_API_KEY",
             "\"${localProps.getProperty("DASHSCOPE_API_KEY", "")}\"")
+        buildConfigField("String", "DASHSCOPE_WS_ENDPOINT",
+            "\"${localProps.getProperty("DASHSCOPE_WS_ENDPOINT", "")}\"")
 
         // OpenClaw 智能体网关配置（从 local.properties 读取）
         buildConfigField("String", "OPENCLAW_GATEWAY_TOKEN",

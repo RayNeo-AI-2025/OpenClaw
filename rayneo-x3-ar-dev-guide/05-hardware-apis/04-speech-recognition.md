@@ -85,15 +85,20 @@ val available = SpeechRecognizer.isRecognitionAvailable(context)
 
 ### 4.1 获取 API Key
 
-1. 访问 [DashScope 控制台](https://dashscope.console.aliyun.com/)
+1. 访问 DashScope 控制台：
+   - 中国大陆用户：[dashscope.console.aliyun.com](https://dashscope.console.aliyun.com/)
+   - 海外用户：[bailian.console.alibabacloud.com](https://bailian.console.alibabacloud.com/)（无需中国手机号）
 2. 左侧菜单 → **API-KEY 管理** → 创建 API Key
 3. 将 Key 填入 `asr/AsrConfig.kt`
+
+> **海外用户注意**：国际版 API Key 须搭配国际版 WebSocket 端点 `wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference` 使用，两者不可混用。
 
 ### 4.2 连接参数
 
 | 参数 | 值 |
 |------|-----|
-| 端点 | `wss://dashscope.aliyuncs.com/api-ws/v1/inference` |
+| 端点（国内） | `wss://dashscope.aliyuncs.com/api-ws/v1/inference` |
+| 端点（国际） | `wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference` |
 | 认证 Header | `Authorization: Bearer sk-xxxx` |
 | 模型 | `paraformer-realtime-v2` |
 | 音频格式 | PCM，16kHz，单声道，16-bit |
@@ -232,13 +237,16 @@ package your.package.asr
 object AsrConfig {
 
     // ★ 填入阿里云 DashScope API Key
-    // 申请：https://dashscope.console.aliyun.com/ → API-KEY 管理
+    // 中国大陆用户：https://dashscope.console.aliyun.com/ → API-KEY 管理
+    // 海外用户：https://bailian.console.alibabacloud.com/ → API-KEY 管理
     const val DASHSCOPE_API_KEY = ""
 
     // 模型：支持中英日韩法德西俄等多语言实时识别
     const val MODEL = "paraformer-realtime-v2"
 
-    // WebSocket 端点（无需修改）
+    // WebSocket 端点
+    // 国内：wss://dashscope.aliyuncs.com/api-ws/v1/inference（默认）
+    // 国际：wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference（海外用户须改为此端点）
     const val WS_ENDPOINT = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
 
     // 音频参数（必须与此一致，不可随意更改）
@@ -649,16 +657,17 @@ class YourActivity : BaseMirrorActivity<YourBinding>() {
 
 **原因**：`AsrConfig.DASHSCOPE_API_KEY` 为空字符串。
 
-**解决**：到 [DashScope 控制台](https://dashscope.console.aliyun.com/) 申请 Key 并填入。
+**解决**：到 DashScope 控制台申请 Key 并填入（中国大陆：[dashscope.console.aliyun.com](https://dashscope.console.aliyun.com/)；海外：[bailian.console.alibabacloud.com](https://bailian.console.alibabacloud.com/)）。
 
 ---
 
 ### 问题二：onError 收到 "连接失败"
 
 可能原因：
-1. **网络不通**：眼镜是否连接了 Wi-Fi？检查 `adb shell ping dashscope.aliyuncs.com`
+1. **网络不通**：眼镜是否连接了 Wi-Fi？检查 `adb shell ping dashscope.aliyuncs.com`（海外用户 ping `dashscope-intl.aliyuncs.com`）
 2. **API Key 无效**：Key 填写错误或已过期
-3. **账户欠费**：DashScope 免费额度用完且未充值
+3. **Key 与端点不匹配**：国际版 Key 须搭配国际版端点 `wss://dashscope-intl.aliyuncs.com/...`，反之亦然
+4. **账户欠费**：DashScope 免费额度用完且未充值
 
 ---
 

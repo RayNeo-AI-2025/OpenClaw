@@ -223,7 +223,8 @@ public final class BuildConfig {
 sdk.dir=/path/to/your/Android/Sdk
 
 # DashScope 语音识别 API Key
-# 申请：https://dashscope.console.aliyun.com/ → API-KEY 管理
+# 申请（中国大陆）：https://dashscope.console.aliyun.com/ → API-KEY 管理
+# 申请（海外）：https://bailian.console.alibabacloud.com/ → API-KEY 管理
 DASHSCOPE_API_KEY=
 
 # 百度翻译（可选）

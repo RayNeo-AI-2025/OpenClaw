@@ -18,6 +18,9 @@ import com.openclaw.app.RuntimeConfig
  *
  *    DASHSCOPE_API_KEY=sk-xxxx
  *
+ *    # WebSocket 端点（海外用户需改为国际版端点）
+ *    DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
+ *
  *    # 识别语言（BCP-47 代码），默认中文
  *    ASR_LANGUAGE=zh
  *
@@ -26,7 +29,12 @@ import com.openclaw.app.RuntimeConfig
  *    # oneshot    — 点击开始，收到完整句子后自动停止
  *    ASR_LISTEN_MODE=continuous
  *
- *  申请 DashScope Key：https://dashscope.console.aliyun.com/ → API-KEY 管理
+ *  申请 DashScope Key：
+ *    中国大陆用户：https://dashscope.console.aliyun.com/ → API-KEY 管理
+ *    海外用户：https://bailian.console.alibabacloud.com/ → API-KEY 管理
+ *
+ *  海外用户还需配置 WebSocket 端点（openclaw.conf 或 local.properties）：
+ *    DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
  * ════════════════════════════════════════════════
  */
 
@@ -73,8 +81,11 @@ object AsrConfig {
     // ASR 模型（支持中英日韩法德西俄等多语言实时识别）
     const val MODEL = "paraformer-realtime-v2"
 
-    // WebSocket 端点
-    const val WS_ENDPOINT = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+    // WebSocket 端点（默认国内版；海外用户通过 openclaw.conf 或 local.properties 覆盖为国际版）
+    private const val DEFAULT_WS_ENDPOINT = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+    val WS_ENDPOINT: String
+        get() = RuntimeConfig.get("DASHSCOPE_WS_ENDPOINT", BuildConfig.DASHSCOPE_WS_ENDPOINT)
+            .trim().ifBlank { DEFAULT_WS_ENDPOINT }
 
     // 音频参数（paraformer-realtime-v2 要求 16kHz 单声道 16-bit PCM）
     const val SAMPLE_RATE = 16000

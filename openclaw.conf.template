@@ -28,8 +28,16 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Alibaba DashScope ASR ─────────────────────────────────────────────────────
-# Get your key at: https://dashscope.console.aliyun.com/ → API-KEY 管理
+# China users:         https://dashscope.console.aliyun.com/ → API-KEY 管理
+# International users: https://bailian.console.alibabacloud.com/ → API-KEY 管理
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ── DashScope WebSocket endpoint ────────────────────────────────────────────
+# International users MUST uncomment and use the international endpoint below.
+# API keys from the China site and the international site are NOT interchangeable.
+#   China (default):   wss://dashscope.aliyuncs.com/api-ws/v1/inference
+#   International:     wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
+# DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
 
 # ── ASR language ──────────────────────────────────────────────────────────────
 # BCP-47 language code passed to DashScope as language_hints.

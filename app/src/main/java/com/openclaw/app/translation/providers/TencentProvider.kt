@@ -1,5 +1,6 @@
 ﻿package com.openclaw.app.translation.providers
 
+import com.openclaw.app.AppConfig
 import com.openclaw.app.translation.TranslationConfig
 import com.openclaw.app.translation.TranslationProvider
 import org.json.JSONObject
@@ -73,8 +74,8 @@ class TencentProvider : TranslationProvider {
         conn.setRequestProperty("X-TC-Timestamp", timestamp.toString())
         conn.setRequestProperty("X-TC-Region", region)
         conn.doOutput = true
-        conn.connectTimeout = 6000
-        conn.readTimeout = 6000
+        conn.connectTimeout = AppConfig.TRANSLATION_TIMEOUT_DOMESTIC_MS
+        conn.readTimeout = AppConfig.TRANSLATION_TIMEOUT_DOMESTIC_MS
         conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
 
         return try {

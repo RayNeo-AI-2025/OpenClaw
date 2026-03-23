@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.openclaw.app.AppConfig
 import com.openclaw.app.agent.AgentConfig
 import com.openclaw.app.agent.OpenClawClient
 import com.openclaw.app.asr.AppLanguage
@@ -53,10 +56,16 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         renderResponseMarkdownNow(scrollToBottom = responseScrollToBottom)
     }
 
+    // ── "Reply started" notification tone ────────────────────────────────
+    private var soundPool: SoundPool? = null
+    private var replyStartSoundId = 0
+    private var replyTonePlayed = false
+
     // ─────────────────────── Lifecycle ───────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        initSoundPool()
         ensureResponseWebViewsConfigured()
         initOpenClawClient()
         renderIdleUI()
@@ -86,6 +95,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         mainHandler.removeCallbacks(responseRenderRunnable)
         speechEngine?.release()
         openClawClient?.release()
+        soundPool?.release()
         super.onDestroy()
     }
 
@@ -99,6 +109,15 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
             user           = AgentConfig.USER_ID,
             timeoutSeconds = AgentConfig.TIMEOUT_SECONDS
         )
+    }
+
+    private fun initSoundPool() {
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        soundPool = SoundPool.Builder().setMaxStreams(1).setAudioAttributes(attrs).build()
+        replyStartSoundId = soundPool!!.load(this, R.raw.reply_start, 1)
     }
 
     private fun initSpeechEngine() {
@@ -230,7 +249,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         mBindingPair.updateView {
             configureResponseWebView(wvResponse)
             wvResponse.loadDataWithBaseURL(ASSET_BASE_URL, html, "text/html", "utf-8", null)
-            if (scrollToBottom) wvResponse.postDelayed({ wvResponse.scrollTo(0, Int.MAX_VALUE) }, 60L)
+            if (scrollToBottom) wvResponse.postDelayed({ wvResponse.scrollTo(0, Int.MAX_VALUE) }, AppConfig.WEBVIEW_SCROLL_DELAY_MS)
             else wvResponse.scrollTo(0, 0)
         }
     }
@@ -245,6 +264,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     private fun askAgent(text: String) {
         if (isProcessing) return
         isProcessing = true
+        replyTonePlayed = false
         val myGen = generation
         setStatus(S.aiThinking, COLOR_THINKING)
         setResponseMarkdown("", immediate = true, scrollToBottom = false)
@@ -254,6 +274,10 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                 text = text,
                 onDelta = { _, fullText ->
                     if (generation != myGen) return@askStreaming
+                    if (!replyTonePlayed) {
+                        replyTonePlayed = true
+                        soundPool?.play(replyStartSoundId, 1f, 1f, 1, 0, 1f)
+                    }
                     mainHandler.post { setResponseMarkdown(fullText, immediate = false, scrollToBottom = true) }
                 },
                 onComplete = { finalText ->
@@ -409,26 +433,23 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
 
     companion object {
         private const val REQ_MIC = 100
-        private const val STREAM_RENDER_THROTTLE_MS = 120L
         private const val ASSET_BASE_URL = "file:///android_asset/"
         private const val WEBVIEW_READY_TAG = "agent_response_webview_ready"
 
-        /** px scrolled per swipe gesture */
-        private const val SCROLL_STEP = 320
+        // ── 以下常量已迁移到 AppConfig，此处为别名方便本文件引用 ──
+        private inline val STREAM_RENDER_THROTTLE_MS get() = AppConfig.STREAM_RENDER_THROTTLE_MS
+        private inline val SCROLL_STEP               get() = AppConfig.SCROLL_STEP_PX
 
-        // ── Status bar colours ─────────────────────────────────────────────
-        @ColorInt private val COLOR_IDLE      = Color.parseColor("#484838")
-        @ColorInt private val COLOR_LISTENING = Color.parseColor("#00C896")
-        @ColorInt private val COLOR_THINKING  = Color.parseColor("#F5A30A")
-        @ColorInt private val COLOR_ERROR     = Color.parseColor("#FF5555")
+        private inline val COLOR_IDLE      get() = AppConfig.COLOR_STATUS_IDLE
+        private inline val COLOR_LISTENING get() = AppConfig.COLOR_STATUS_LISTENING
+        private inline val COLOR_THINKING  get() = AppConfig.COLOR_STATUS_THINKING
+        private inline val COLOR_ERROR     get() = AppConfig.COLOR_STATUS_ERROR
 
-        // ── User speech input colours ──────────────────────────────────────
-        @ColorInt private val COLOR_INPUT_EMPTY   = Color.parseColor("#181816")
-        @ColorInt private val COLOR_INPUT_PARTIAL = Color.parseColor("#808060")
-        @ColorInt private val COLOR_INPUT_FINAL   = Color.parseColor("#EEE8DC")
+        private inline val COLOR_INPUT_EMPTY   get() = AppConfig.COLOR_INPUT_EMPTY
+        private inline val COLOR_INPUT_PARTIAL get() = AppConfig.COLOR_INPUT_PARTIAL
+        private inline val COLOR_INPUT_FINAL   get() = AppConfig.COLOR_INPUT_FINAL
 
-        // ── Sidebar session colours ────────────────────────────────────────
-        @ColorInt private val COLOR_SESSION_IDLE   = Color.parseColor("#303028")
-        @ColorInt private val COLOR_SESSION_ACTIVE = Color.parseColor("#00C896")
+        private inline val COLOR_SESSION_IDLE   get() = AppConfig.COLOR_SESSION_IDLE
+        private inline val COLOR_SESSION_ACTIVE get() = AppConfig.COLOR_SESSION_ACTIVE
     }
 }

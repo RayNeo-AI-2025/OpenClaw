@@ -15,6 +15,7 @@ import okio.ByteString
 import okio.ByteString.Companion.toByteString
 import org.json.JSONArray
 import org.json.JSONObject
+import com.openclaw.app.AppConfig
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -40,7 +41,7 @@ class SpeechEngine(
 
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)   // WebSocket 长连接，不设读超时
-        .pingInterval(20, TimeUnit.SECONDS)       // 保活 ping
+        .pingInterval(AppConfig.ASR_WS_PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
         .build()
 
     private var webSocket: WebSocket? = null
@@ -51,6 +52,12 @@ class SpeechEngine(
     @Volatile private var taskStarted = false
     private var taskId = ""
     private var languageHints: List<String> = listOf("en")
+
+    // ── 句子合并防抖 ────────────────────────────────────────────────────────
+    // DashScope 在用户短暂停顿时就会发出 sentence_end，导致一句话被拆成多段。
+    // 用缓冲区累积文本，在最后一个 sentence_end 后等待 AppConfig.ASR_DEBOUNCE_MS 再真正回调 onFinal。
+    private val sentenceBuffer = StringBuilder()
+    private val debounceRunnable = Runnable { flushSentenceBuffer() }
 
     // ── 公开 API ──────────────────────────────────────────────────────────────
 
@@ -74,6 +81,8 @@ class SpeechEngine(
         if (!isRunning) return
         isRunning = false
         taskStarted = false
+        // 用户主动停止时立即发送缓冲区中已有的文本，不再等待防抖
+        flushSentenceBuffer()
         stopRecording()
         sendFinishTask()
         webSocket?.close(1000, "stopped")
@@ -85,7 +94,34 @@ class SpeechEngine(
      */
     fun release() {
         stop()
+        mainHandler.removeCallbacks(debounceRunnable)
         client.dispatcher.executorService.shutdown()
+    }
+
+    // ── 句子合并逻辑 ────────────────────────────────────────────────────────────
+
+    /**
+     * 将一段完成的句子追加到缓冲区，并重置防抖计时器。
+     * 在 [AppConfig.ASR_DEBOUNCE_MS] 内没有新句子到达时触发 [flushSentenceBuffer]。
+     */
+    private fun appendAndDebounce(text: String) {
+        if (sentenceBuffer.isNotEmpty()) sentenceBuffer.append(" ")
+        sentenceBuffer.append(text)
+        // 展示已缓冲文本（无 "…" 后缀，表示该段已确认）
+        onPartial(sentenceBuffer.toString())
+        // 重置防抖计时器
+        mainHandler.removeCallbacks(debounceRunnable)
+        mainHandler.postDelayed(debounceRunnable, AppConfig.ASR_DEBOUNCE_MS)
+    }
+
+    /**
+     * 防抖到期，将缓冲区内容作为最终结果回调。
+     */
+    private fun flushSentenceBuffer() {
+        mainHandler.removeCallbacks(debounceRunnable)
+        val merged = sentenceBuffer.toString().trim()
+        sentenceBuffer.clear()
+        if (merged.isNotEmpty()) onFinal(merged)
     }
 
     // ── WebSocket ─────────────────────────────────────────────────────────────
@@ -143,9 +179,15 @@ class SpeechEngine(
                     val transcript = sentence.optString("text").trim()
                     if (transcript.isBlank()) return
                     val isFinal = sentence.optBoolean("sentence_end", false)
-                    mainHandler.post {
-                        if (isFinal) onFinal(transcript)
-                        else onPartial(transcript)
+                    if (isFinal) {
+                        mainHandler.post { appendAndDebounce(transcript) }
+                    } else {
+                        // 中间结果：展示缓冲区已有文本 + 当前正在说的内容
+                        mainHandler.post {
+                            val preview = if (sentenceBuffer.isNotEmpty())
+                                "${sentenceBuffer} $transcript" else transcript
+                            onPartial(preview)
+                        }
                     }
                 }
                 "task-failed" -> {
@@ -169,7 +211,7 @@ class SpeechEngine(
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT
         )
-        val bufSize = maxOf(minBuf, AsrConfig.FRAME_BYTES * 4)
+        val bufSize = maxOf(minBuf, AsrConfig.FRAME_BYTES * AppConfig.ASR_AUDIO_BUFFER_MULTIPLIER)
 
         @Suppress("MissingPermission")
         audioRecord = AudioRecord(

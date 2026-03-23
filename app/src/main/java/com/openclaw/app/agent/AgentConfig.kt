@@ -1,5 +1,6 @@
 ﻿package com.openclaw.app.agent
 
+import com.openclaw.app.AppConfig
 import com.openclaw.app.BuildConfig
 import com.openclaw.app.RuntimeConfig
 
@@ -34,8 +35,8 @@ object AgentConfig {
         get() = RuntimeConfig.get("OPENCLAW_AGENT_ID", BuildConfig.OPENCLAW_AGENT_ID)
 
     /** HTTP 请求超时（秒） */
-    const val TIMEOUT_SECONDS: Long = 120
+    inline val TIMEOUT_SECONDS: Long get() = AppConfig.AGENT_READ_TIMEOUT_SECONDS
 
     /** 用于会话关联的用户标识（固定值可保持多轮上下文） */
-    const val USER_ID: String = "ar-glasses-user"
+    inline val USER_ID: String get() = AppConfig.AGENT_USER_ID
 }

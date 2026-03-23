@@ -1,5 +1,6 @@
 ﻿package com.openclaw.app.translation.providers
 
+import com.openclaw.app.AppConfig
 import com.openclaw.app.translation.TranslationConfig
 import com.openclaw.app.translation.TranslationProvider
 import org.json.JSONObject
@@ -36,8 +37,8 @@ class MyMemoryProvider : TranslationProvider {
         if (email.isNotBlank()) url += "&de=${URLEncoder.encode(email, "UTF-8")}"
 
         val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 6000
-        conn.readTimeout = 6000
+        conn.connectTimeout = AppConfig.TRANSLATION_TIMEOUT_DOMESTIC_MS
+        conn.readTimeout = AppConfig.TRANSLATION_TIMEOUT_DOMESTIC_MS
         return try {
             val json = JSONObject(conn.inputStream.bufferedReader().readText())
             val status = json.optInt("responseStatus", 0)

@@ -2,7 +2,6 @@ package com.openclaw.app
 
 import android.graphics.Color
 import android.os.Bundle
-import androidx.annotation.ColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -220,15 +219,15 @@ class SettingsActivity : BaseMirrorActivity<ActivitySettingsBinding>() {
         private const val ROW_UI_LANGUAGE = 2
         private const val ROW_RESET       = 3
 
-        @ColorInt private val COLOR_ROW_SELECTED       = Color.parseColor("#1500C896")
-        @ColorInt private val COLOR_LABEL_ACTIVE       = Color.parseColor("#00C896")
-        @ColorInt private val COLOR_LABEL_IDLE         = Color.parseColor("#484838")
-        @ColorInt private val COLOR_VALUE_ACTIVE       = Color.parseColor("#EEE8DC")
-        @ColorInt private val COLOR_VALUE_IDLE         = Color.parseColor("#484838")
+        // ── 颜色已迁移到 AppConfig，此处为别名 ──
+        private inline val COLOR_ROW_SELECTED       get() = AppConfig.COLOR_ROW_SELECTED
+        private inline val COLOR_LABEL_ACTIVE       get() = AppConfig.COLOR_LABEL_ACTIVE
+        private inline val COLOR_LABEL_IDLE         get() = AppConfig.COLOR_LABEL_IDLE
+        private inline val COLOR_VALUE_ACTIVE       get() = AppConfig.COLOR_VALUE_ACTIVE
+        private inline val COLOR_VALUE_IDLE         get() = AppConfig.COLOR_VALUE_IDLE
 
-        // Reset row uses orange/warning palette
-        @ColorInt private val COLOR_RESET_ROW_SELECTED = Color.parseColor("#15FF6B35")
-        @ColorInt private val COLOR_RESET_ACTIVE       = Color.parseColor("#FF6B35")
-        @ColorInt private val COLOR_RESET_IDLE         = Color.parseColor("#4A3020")
+        private inline val COLOR_RESET_ROW_SELECTED get() = AppConfig.COLOR_RESET_ROW_SELECTED
+        private inline val COLOR_RESET_ACTIVE       get() = AppConfig.COLOR_RESET_ACTIVE
+        private inline val COLOR_RESET_IDLE         get() = AppConfig.COLOR_RESET_IDLE
     }
 }

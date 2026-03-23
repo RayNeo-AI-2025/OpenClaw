@@ -1,5 +1,6 @@
 ﻿package com.openclaw.app.agent
 
+import com.openclaw.app.AppConfig
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,7 +29,7 @@ class OpenClawClient(
 ) {
     private val client = OkHttpClient.Builder()
         .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
-        .connectTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(AppConfig.AGENT_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
     /**
@@ -59,6 +60,10 @@ class OpenClawClient(
             .url("${baseUrl.trimEnd('/')}/v1/responses")
             .post(body)
             .header("Accept", "text/event-stream")
+            // 关键：禁止 gzip 压缩。OkHttp 默认发送 Accept-Encoding: gzip，
+            // 若服务端/CDN 返回 gzip 编码，解压器会缓冲小数据块，
+            // 导致 SSE 事件无法实时到达 —— 直到连接关闭才一次性 flush。
+            .header("Accept-Encoding", "identity")
             .header("x-openclaw-agent-id", agentId)
 
         if (token.isNotBlank()) {
@@ -69,7 +74,7 @@ class OpenClawClient(
             val response = client.newCall(requestBuilder.build()).execute()
 
             if (!response.isSuccessful) {
-                val errBody = response.body?.string()?.take(200) ?: "unknown error"
+                val errBody = response.body?.string()?.take(AppConfig.AGENT_ERROR_BODY_MAX_CHARS) ?: "unknown error"
                 response.close()
                 onError("HTTP ${response.code}: $errBody")
                 return
@@ -82,7 +87,9 @@ class OpenClawClient(
                 return
             }
 
-            val reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8))
+            // 缓冲区设为 1 字节 —— 确保 readLine() 收到 '\n' 后立即返回，
+            // 不会因默认 8KB 缓冲而积攒多条 SSE 事件。
+            val reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8), 1)
             val fullText = StringBuilder()
             var eventType: String? = null
             val dataLines = mutableListOf<String>()

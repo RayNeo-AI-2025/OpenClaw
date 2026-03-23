@@ -1,5 +1,6 @@
 ﻿package com.openclaw.app.translation.providers
 
+import com.openclaw.app.AppConfig
 import com.openclaw.app.translation.TranslationConfig
 import com.openclaw.app.translation.TranslationProvider
 import org.json.JSONArray
@@ -49,8 +50,8 @@ class AzureProvider : TranslationProvider {
         conn.setRequestProperty("Ocp-Apim-Subscription-Region", region)
         conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         conn.doOutput = true
-        conn.connectTimeout = 8000
-        conn.readTimeout = 8000
+        conn.connectTimeout = AppConfig.TRANSLATION_TIMEOUT_OVERSEAS_MS
+        conn.readTimeout = AppConfig.TRANSLATION_TIMEOUT_OVERSEAS_MS
         conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
 
         return try {

@@ -14,31 +14,23 @@ import com.openclaw.app.RuntimeConfig
  *   3. local.properties → BuildConfig（编译时注入，baked into APK）
  *   4. 代码默认值
  *
+ *  端点自动回退机制：
+ *   - 默认先尝试国内端点（dashscope.aliyuncs.com + paraformer-realtime-v2）
+ *   - 如果连接失败（DNS/网络），自动回退到国际版端点（dashscope-intl + fun-asr-realtime）
+ *   - 成功的端点缓存到 AppSettings，下次直接使用
+ *   - 如果 openclaw.conf 显式指定了端点，则只使用该端点不做回退
+ *
  *  可配置项一览（openclaw.conf 中可设置）：
  *
  *    DASHSCOPE_API_KEY=sk-xxxx
- *
- *    # ASR 模型（海外用户需改为 fun-asr-realtime，因为 paraformer 仅限中国大陆）
  *    DASHSCOPE_ASR_MODEL=fun-asr-realtime
- *
- *    # WebSocket 端点（海外用户需改为国际版端点）
  *    DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
- *
- *    # 识别语言（BCP-47 代码），默认中文
  *    ASR_LANGUAGE=zh
- *
- *    # 监听模式，默认持续监听
- *    # continuous — 点击开始，再次点击才停止
- *    # oneshot    — 点击开始，收到完整句子后自动停止
  *    ASR_LISTEN_MODE=continuous
  *
  *  申请 DashScope Key：
  *    中国大陆用户：https://dashscope.console.aliyun.com/ → API-KEY 管理
  *    海外用户：https://bailian.console.alibabacloud.com/ → API-KEY 管理
- *
- *  海外用户还需配置端点和模型（openclaw.conf 或 local.properties）：
- *    DASHSCOPE_WS_ENDPOINT=wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference
- *    DASHSCOPE_ASR_MODEL=fun-asr-realtime
  * ════════════════════════════════════════════════
  */
 
@@ -51,7 +43,29 @@ enum class ListenMode {
     ONESHOT
 }
 
+/**
+ * ASR 端点配置：一个 WebSocket 端点 + 对应的模型名称。
+ * 国内与国际版的模型不同，必须配对使用。
+ */
+data class EndpointProfile(
+    val tag: String,
+    val endpoint: String,
+    val model: String
+)
+
 object AsrConfig {
+
+    // ── 内置端点配置 ─────────────────────────────────────
+    private val DOMESTIC = EndpointProfile(
+        tag      = "domestic",
+        endpoint = "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+        model    = "paraformer-realtime-v2"
+    )
+    private val INTERNATIONAL = EndpointProfile(
+        tag      = "intl",
+        endpoint = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference",
+        model    = "fun-asr-realtime"
+    )
 
     // 运行时配置优先，fallback 到编译时 BuildConfig
     val DASHSCOPE_API_KEY: String
@@ -60,8 +74,6 @@ object AsrConfig {
     /**
      * 语音识别语言。
      * 优先级：openclaw.conf → AppSettings（SettingsActivity）→ 默认 zh
-     * openclaw.conf 键名：ASR_LANGUAGE
-     * 取值：zh（中文）/ en / ja / ko / fr / de / es / ru
      */
     val LANGUAGE: String
         get() = RuntimeConfig.get("ASR_LANGUAGE", AppSettings.language)
@@ -70,8 +82,6 @@ object AsrConfig {
     /**
      * 监听模式。
      * 优先级：openclaw.conf → AppSettings（SettingsActivity）→ 默认 continuous
-     * openclaw.conf 键名：ASR_LISTEN_MODE
-     * 取值：continuous（默认）/ oneshot
      */
     val LISTEN_MODE: ListenMode
         get() = when (
@@ -82,21 +92,45 @@ object AsrConfig {
             else -> ListenMode.CONTINUOUS
         }
 
-    // ASR 模型（默认 paraformer-realtime-v2，海外用户须改为 fun-asr-realtime）
-    private const val DEFAULT_MODEL = "paraformer-realtime-v2"
-    val MODEL: String
-        get() = RuntimeConfig.get("DASHSCOPE_ASR_MODEL", BuildConfig.DASHSCOPE_ASR_MODEL)
-            .trim().ifBlank { DEFAULT_MODEL }
+    /**
+     * 返回有序的端点候选列表供 SpeechEngine 逐一尝试。
+     *
+     * - 如果 openclaw.conf 显式指定了端点/模型 → 只返回该单一配置（不做回退）
+     * - 否则 → 返回 [缓存成功的端点, 国内, 国际]（去重后）
+     */
+    fun getEndpointCandidates(): List<EndpointProfile> {
+        // openclaw.conf 显式指定 → 只用该配置，不回退
+        if (RuntimeConfig.isLoaded) {
+            val confEndpoint = RuntimeConfig.get("DASHSCOPE_WS_ENDPOINT", "").trim()
+            val confModel    = RuntimeConfig.get("DASHSCOPE_ASR_MODEL", "").trim()
+            if (confEndpoint.isNotEmpty() || confModel.isNotEmpty()) {
+                return listOf(EndpointProfile(
+                    tag      = "conf-override",
+                    endpoint = confEndpoint.ifEmpty { DOMESTIC.endpoint },
+                    model    = confModel.ifEmpty { DOMESTIC.model }
+                ))
+            }
+        }
 
-    // WebSocket 端点（默认国内版；海外用户通过 openclaw.conf 或 local.properties 覆盖为国际版）
-    private const val DEFAULT_WS_ENDPOINT = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
-    val WS_ENDPOINT: String
-        get() = RuntimeConfig.get("DASHSCOPE_WS_ENDPOINT", BuildConfig.DASHSCOPE_WS_ENDPOINT)
-            .trim().ifBlank { DEFAULT_WS_ENDPOINT }
+        // 正常模式：缓存优先 → 国内 → 国际
+        val candidates = mutableListOf<EndpointProfile>()
+        val cached = AppSettings.cachedAsrEndpoint
+        if (cached == INTERNATIONAL.tag) {
+            candidates += INTERNATIONAL
+        }
+        candidates += DOMESTIC
+        candidates += INTERNATIONAL
+        return candidates.distinctBy { it.tag }
+    }
 
-    // 音频参数（paraformer-realtime-v2 要求 16kHz 单声道 16-bit PCM）
+    /** 记录上次连接成功的端点 tag，加速下次连接。 */
+    fun cacheSuccessfulEndpoint(profile: EndpointProfile) {
+        AppSettings.cachedAsrEndpoint = profile.tag
+    }
+
+    // 音频参数（16kHz 单声道 16-bit PCM）
     const val SAMPLE_RATE = 16000
 
-    // 每帧字节数 = 100ms @ 16kHz 16-bit mono = 16000 * 2 * 0.1 = 3200 bytes
+    // 每帧字节数 = 100ms @ 16kHz 16-bit mono = 3200 bytes
     const val FRAME_BYTES = 3200
 }

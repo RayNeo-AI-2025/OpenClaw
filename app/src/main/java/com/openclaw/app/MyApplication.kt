@@ -12,15 +12,15 @@ class MyApplication : Application() {
         // for AsrConfig / AgentConfig before RuntimeConfig loads openclaw.conf overrides.
         AppSettings.init(this)
 
-        // ── UI language: auto-detect on first launch, then honour persisted choice ──
+        // ── UI language: honour persisted choice, or detect for initial defaults ──
         val saved = AppSettings.uiLanguage
         val uiLang = if (saved.isNotEmpty()) {
             UiLanguage.fromCode(saved)
         } else {
-            // First launch — detect from system locale
-            val detected = UiLanguage.fromCode(Locale.getDefault().language)
-            AppSettings.uiLanguage = detected.code
-            detected
+            // First launch — detect from system locale for initial UI defaults,
+            // but do NOT persist yet. LanguagePickerActivity will save the
+            // explicit user choice on its first appearance.
+            UiLanguage.fromCode(Locale.getDefault().language)
         }
         UiStrings.switchTo(uiLang)
 

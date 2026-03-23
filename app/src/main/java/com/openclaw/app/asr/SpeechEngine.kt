@@ -125,6 +125,15 @@ class SpeechEngine(
         if (merged.isNotEmpty()) onFinal(merged)
     }
 
+    // ── 端点回退 ──────────────────────────────────────────────────────────────
+
+    /** 当前尝试的候选端点列表和索引 */
+    private var endpointCandidates: List<EndpointProfile> = emptyList()
+    private var currentCandidateIndex = 0
+
+    /** 当前正在使用的端点配置（连接成功后由 onOpen 缓存） */
+    private var activeProfile: EndpointProfile? = null
+
     // ── WebSocket ─────────────────────────────────────────────────────────────
 
     private fun connectWebSocket() {
@@ -135,18 +144,35 @@ class SpeechEngine(
             return
         }
 
-        val endpoint = AsrConfig.WS_ENDPOINT
-        Log.i(TAG, "Connecting to DashScope endpoint: $endpoint, model: ${AsrConfig.MODEL}")
+        endpointCandidates = AsrConfig.getEndpointCandidates()
+        currentCandidateIndex = 0
+        tryNextEndpoint(apiKey)
+    }
+
+    private fun tryNextEndpoint(apiKey: String) {
+        if (currentCandidateIndex >= endpointCandidates.size) {
+            // 所有候选端点都已失败
+            isRunning = false
+            mainHandler.post { onError("ASR 连接失败: 所有端点均不可用") }
+            return
+        }
+
+        val profile = endpointCandidates[currentCandidateIndex]
+        activeProfile = profile
+        Log.i(TAG, "Trying endpoint [${profile.tag}]: ${profile.endpoint}, model: ${profile.model}")
 
         val request = Request.Builder()
-            .url(endpoint)
+            .url(profile.endpoint)
             .header("Authorization", "Bearer $apiKey")
             .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
-                Log.i(TAG, "WebSocket connected, sending run-task")
-                ws.send(buildRunTaskJson())
+                Log.i(TAG, "WebSocket connected via [${profile.tag}]")
+                AsrConfig.cacheSuccessfulEndpoint(profile)
+                val runTask = buildRunTaskJson()
+                Log.i(TAG, "Sending run-task: $runTask")
+                ws.send(runTask)
             }
 
             override fun onMessage(ws: WebSocket, text: String) {
@@ -154,8 +180,17 @@ class SpeechEngine(
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failure: ${t.message}, response code: ${response?.code}", t)
-                if (isRunning) {
+                Log.w(TAG, "Endpoint [${profile.tag}] failed: ${t.message}", t)
+                if (!isRunning) return
+
+                val nextIdx = currentCandidateIndex + 1
+                if (nextIdx < endpointCandidates.size) {
+                    // 还有候选端点，尝试下一个
+                    Log.i(TAG, "Falling back to next endpoint candidate...")
+                    currentCandidateIndex = nextIdx
+                    tryNextEndpoint(apiKey)
+                } else {
+                    // 全部失败
                     isRunning = false
                     stopRecording()
                     mainHandler.post { onError("ASR 连接失败: ${t.message}") }
@@ -197,7 +232,10 @@ class SpeechEngine(
                     }
                 }
                 "task-failed" -> {
+                    val errCode = header.optString("error_code", "")
                     val errMsg = header.optString("error_message", "识别任务失败")
+                    Log.e(TAG, "task-failed: code=$errCode, message=$errMsg")
+                    Log.e(TAG, "task-failed full response: $text")
                     isRunning = false
                     stopRecording()
                     mainHandler.post { onError(errMsg) }
@@ -279,7 +317,7 @@ class SpeechEngine(
             put("task_group", "audio")
             put("task", "asr")
             put("function", "recognition")
-            put("model", AsrConfig.MODEL)
+            put("model", activeProfile?.model ?: "paraformer-realtime-v2")
             put("parameters", JSONObject().apply {
                 put("format", "pcm")
                 put("sample_rate", AsrConfig.SAMPLE_RATE)

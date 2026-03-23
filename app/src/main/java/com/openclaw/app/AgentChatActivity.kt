@@ -69,21 +69,32 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         ensureResponseWebViewsConfigured()
         initOpenClawClient()
         renderIdleUI()
-        if (hasMicPermission()) {
-            initSpeechEngine()
-        } else {
-            ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC
-            )
-        }
         collectTempleActions()
+
+        if (AppSettings.uiLanguage.isEmpty()) {
+            // First launch — show language picker first; mic permission and
+            // speech engine init are deferred to onResume after the user has
+            // chosen their language, so all prompts appear in the right locale.
+            startActivity(Intent(this, LanguagePickerActivity::class.java))
+        } else {
+            requestMicOrInitEngine()
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // Refresh all UI text whenever we return from SettingsActivity
-        // (UI language or ASR language may have changed).
+        // Sync UiStrings with persisted choice (covers return from LanguagePickerActivity
+        // or SettingsActivity where UI language may have changed).
+        val savedLang = AppSettings.uiLanguage
+        if (savedLang.isNotEmpty()) UiStrings.switchTo(UiLanguage.fromCode(savedLang))
+        // Refresh all UI text (language badge, hint bar, status, etc.).
         refreshUiText()
+
+        // Ensure mic permission / speech engine is initialised after language picker.
+        if (speechEngine == null && AppSettings.uiLanguage.isNotEmpty()) {
+            requestMicOrInitEngine()
+        }
+
         // Execute a conversation reset requested from SettingsActivity.
         if (AppSettings.pendingReset) {
             AppSettings.pendingReset = false
@@ -416,6 +427,13 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     }
 
     // ─────────────────────── Permissions ───────────────────────
+
+    private fun requestMicOrInitEngine() {
+        if (hasMicPermission()) initSpeechEngine()
+        else ActivityCompat.requestPermissions(
+            this, arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC
+        )
+    }
 
     private fun hasMicPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==

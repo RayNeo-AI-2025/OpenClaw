@@ -16,10 +16,11 @@ import android.content.SharedPreferences
  */
 object AppSettings {
 
-    private const val PREFS_NAME      = "openclaw_settings"
-    private const val KEY_LANGUAGE    = "asr_language"
-    private const val KEY_LISTEN_MODE = "asr_listen_mode"
-    private const val KEY_UI_LANGUAGE = "ui_language"
+    private const val PREFS_NAME            = "openclaw_settings"
+    private const val KEY_LANGUAGE          = "asr_language"
+    private const val KEY_LISTEN_MODE       = "asr_listen_mode"
+    private const val KEY_UI_LANGUAGE       = "ui_language"
+    private const val KEY_CACHED_ASR_EP     = "cached_asr_endpoint"
 
     private lateinit var prefs: SharedPreferences
 
@@ -52,6 +53,14 @@ object AppSettings {
     var uiLanguage: String
         get() = prefs.getString(KEY_UI_LANGUAGE, "") ?: ""
         set(value) { prefs.edit().putString(KEY_UI_LANGUAGE, value).apply() }
+
+    /**
+     * 上次 ASR 连接成功的端点 tag ("domestic" / "intl")。
+     * 空串表示未缓存，下次连接从国内端点开始尝试。
+     */
+    var cachedAsrEndpoint: String
+        get() = prefs.getString(KEY_CACHED_ASR_EP, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_CACHED_ASR_EP, value).apply() }
 
     /**
      * In-memory flag: SettingsActivity sets this to true when the user

@@ -66,6 +66,42 @@ DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # Default: continuous
 # ASR_LISTEN_MODE=continuous
 
+# ── Speech Engine Selection ───────────────────────────────────────────────────
+# STT (speech-to-text) engine: "local" (sherpa-onnx on-device) or "dashscope"
+# TTS (text-to-speech) engine: "local" (sherpa-onnx Piper on-device) or "none"
+#
+# To use local engines you must supply the sherpa-onnx AAR and model files
+# (they are too large for git and must be downloaded separately):
+#
+#   1. Download the sherpa-onnx Android AAR and place it at:
+#        app/libs/sherpa-onnx.aar
+#      Pre-built AARs are available from:
+#        https://github.com/k2-fsa/sherpa-onnx/releases
+#
+#   2. Download the streaming STT model and extract it into:
+#        app/src/main/assets/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile/
+#      The model archive can be found at:
+#        https://github.com/k2-fsa/sherpa-onnx/releases
+#      Required files: encoder-epoch-99-avg-1.int8.onnx,
+#                      decoder-epoch-99-avg-1.onnx,
+#                      joiner-epoch-99-avg-1.int8.onnx,
+#                      tokens.txt
+#
+#   3. Download the Piper VITS TTS model and extract it into:
+#        app/src/main/assets/vits-piper-en_US-amy-low-int8/
+#      Required files: en_US-amy-low.onnx, tokens.txt, espeak-ng-data/
+#
+#   4. Set STT_ENGINE=local and TTS_ENGINE=local below (or in openclaw.conf).
+#
+# To use DashScope cloud STT instead, set STT_ENGINE=dashscope and configure
+# DASHSCOPE_API_KEY above. To disable TTS, set TTS_ENGINE=none.
+#
+# Default: local
+STT_ENGINE=local
+
+# Default: local
+TTS_ENGINE=local
+
 # ── OpenClaw Agent Gateway ────────────────────────────────────────────────────
 # Base URL of your OpenClaw server (include port, no trailing slash)
 OPENCLAW_BASE_URL=http://192.168.x.x:18789

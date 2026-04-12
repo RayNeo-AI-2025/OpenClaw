@@ -23,8 +23,10 @@ import com.openclaw.app.agent.OpenClawClient
 import com.openclaw.app.asr.AppLanguage
 import com.openclaw.app.asr.AsrConfig
 import com.openclaw.app.asr.ListenMode
+import com.openclaw.app.asr.LocalSpeechEngine
 import com.openclaw.app.asr.SpeechEngine
 import com.openclaw.app.databinding.ActivityAgentChatBinding
+import com.openclaw.app.tts.LocalTtsEngine
 import com.openclaw.app.ui.MarkdownRenderer
 import com.ffalcon.mercury.android.sdk.touch.TempleAction
 import com.ffalcon.mercury.android.sdk.ui.activity.BaseMirrorActivity
@@ -35,8 +37,18 @@ import kotlinx.coroutines.launch
 class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
 
     private var speechEngine: SpeechEngine? = null
+    private var localSpeechEngine: LocalSpeechEngine? = null
+    private var localTtsEngine: LocalTtsEngine? = null
     private var openClawClient: OpenClawClient? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** True when using the local sherpa-onnx STT engine instead of DashScope. */
+    private val useLocalStt: Boolean
+        get() = RuntimeConfig.get("STT_ENGINE", "local").trim().lowercase() == "local"
+
+    /** True when using the local sherpa-onnx TTS engine. */
+    private val useLocalTts: Boolean
+        get() = RuntimeConfig.get("TTS_ENGINE", "local").trim().lowercase() == "local"
 
     private var isListening = false
     private var isProcessing = false
@@ -91,7 +103,7 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
         refreshUiText()
 
         // Ensure mic permission / speech engine is initialised after language picker.
-        if (speechEngine == null && AppSettings.uiLanguage.isNotEmpty()) {
+        if (speechEngine == null && localSpeechEngine == null && AppSettings.uiLanguage.isNotEmpty()) {
             requestMicOrInitEngine()
         }
 
@@ -105,6 +117,8 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(responseRenderRunnable)
         speechEngine?.release()
+        localSpeechEngine?.release()
+        localTtsEngine?.release()
         openClawClient?.release()
         soundPool?.release()
         super.onDestroy()
@@ -132,22 +146,42 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     }
 
     private fun initSpeechEngine() {
-        speechEngine = SpeechEngine(
-            context   = this,
-            onPartial = { text -> setSpeechInput("$text…", isPartial = true) },
-            onFinal   = { text ->
-                setSpeechInput(text, isPartial = false)
-                // Oneshot mode: stop listening as soon as a complete utterance arrives.
-                // The user must tap again for the next query.
-                if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT && isListening) {
-                    isListening = false
-                    stopListening()
-                    setStatus(S.pausedTapContinue, COLOR_IDLE)
-                }
-                askAgent(text)
-            },
-            onError   = { msg -> setStatus(S.asrError(msg), COLOR_ERROR); isListening = false }
-        )
+        if (useLocalStt) {
+            localSpeechEngine = LocalSpeechEngine(
+                context   = this,
+                onPartial = { text -> setSpeechInput(text, isPartial = true) },
+                onFinal   = { text ->
+                    setSpeechInput(text, isPartial = false)
+                    if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT && isListening) {
+                        isListening = false
+                        stopListening()
+                        setStatus(S.pausedTapContinue, COLOR_IDLE)
+                    }
+                    askAgent(text)
+                },
+                onError   = { msg -> setStatus(S.asrError(msg), COLOR_ERROR); isListening = false }
+            )
+        } else {
+            speechEngine = SpeechEngine(
+                context   = this,
+                onPartial = { text -> setSpeechInput("$text\u2026", isPartial = true) },
+                onFinal   = { text ->
+                    setSpeechInput(text, isPartial = false)
+                    if (AsrConfig.LISTEN_MODE == ListenMode.ONESHOT && isListening) {
+                        isListening = false
+                        stopListening()
+                        setStatus(S.pausedTapContinue, COLOR_IDLE)
+                    }
+                    askAgent(text)
+                },
+                onError   = { msg -> setStatus(S.asrError(msg), COLOR_ERROR); isListening = false }
+            )
+        }
+
+        // Initialise TTS engine if configured for local
+        if (useLocalTts) {
+            localTtsEngine = LocalTtsEngine(this)
+        }
     }
 
     // ─────────────────────── UI state ───────────────────────
@@ -299,6 +333,10 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
                         addSession()
                         if (isListening) setStatus(S.listening(currentLanguageDisplayName()), COLOR_LISTENING)
                         else setStatus(S.pausedTapContinue, COLOR_IDLE)
+                        // Speak the response aloud via local TTS if enabled
+                        if (useLocalTts && finalText.isNotBlank()) {
+                            localTtsEngine?.speak(finalText)
+                        }
                     }
                 },
                 onError = { error ->
@@ -356,14 +394,23 @@ class AgentChatActivity : BaseMirrorActivity<ActivityAgentChatBinding>() {
     // ─────────────────────── Speech control ───────────────────────
 
     private fun startListening() {
-        speechEngine?.start(listOf(AsrConfig.LANGUAGE))
+        // Stop any ongoing TTS playback before listening
+        localTtsEngine?.stop()
+        if (useLocalStt) {
+            localSpeechEngine?.start(listOf(AsrConfig.LANGUAGE))
+        } else {
+            speechEngine?.start(listOf(AsrConfig.LANGUAGE))
+        }
         setStatus(S.listening(currentLanguageDisplayName()), COLOR_LISTENING)
     }
 
-    private fun stopListening() = speechEngine?.stop() ?: Unit
+    private fun stopListening() {
+        if (useLocalStt) localSpeechEngine?.stop() else speechEngine?.stop()
+    }
 
     private fun toggleListening() {
-        if (speechEngine == null) { FToast.show(S.speechNotReady); return }
+        val engineReady = if (useLocalStt) localSpeechEngine != null else speechEngine != null
+        if (!engineReady) { FToast.show(S.speechNotReady); return }
         isListening = !isListening
         if (isListening) {
             startListening()
